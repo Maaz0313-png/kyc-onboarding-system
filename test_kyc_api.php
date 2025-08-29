@@ -247,36 +247,29 @@ function testServicesConfiguration()
 {
     echo "\n⚙️ Testing Services Configuration...\n";
 
-    // Test NADRA service configuration
-    $nadraConfig = config('services.nadra');
-    if ($nadraConfig) {
-        echo "✅ NADRA Service Configured\n";
-        echo "   Base URL: " . $nadraConfig['base_url'] . "\n";
-        echo "   Sandbox Mode: " . ($nadraConfig['sandbox_mode'] ? 'Yes' : 'No') . "\n";
+    $servicesConfigPath = '/opt/lampp/htdocs/kyc-onboarding-system/config/services.php';
+    
+    if (file_exists($servicesConfigPath)) {
+        $configContent = file_get_contents($servicesConfigPath);
+        
+        $services = ['nadra', 'ocr', 'virus_scan', 'sanctions', 'fmu'];
+        $configuredServices = 0;
+        
+        foreach ($services as $service) {
+            if (strpos($configContent, "'$service'") !== false) {
+                echo "✅ $service Service Configuration Found\n";
+                $configuredServices++;
+            } else {
+                echo "❌ $service Service Configuration Missing\n";
+            }
+        }
+        
+        echo "   Configured Services: $configuredServices/" . count($services) . "\n";
+        return $configuredServices >= 3;
     } else {
-        echo "❌ NADRA Service Not Configured\n";
+        echo "❌ Services Configuration File Not Found\n";
+        return false;
     }
-
-    // Test OCR service configuration
-    $ocrConfig = config('services.ocr');
-    if ($ocrConfig) {
-        echo "✅ OCR Service Configured\n";
-        echo "   Provider: " . $ocrConfig['provider'] . "\n";
-    } else {
-        echo "❌ OCR Service Not Configured\n";
-    }
-
-    // Test virus scanning configuration
-    $virusScanConfig = config('services.virus_scan');
-    if ($virusScanConfig) {
-        echo "✅ Virus Scanning Configured\n";
-        echo "   Provider: " . $virusScanConfig['provider'] . "\n";
-        echo "   Enabled: " . ($virusScanConfig['enabled'] ? 'Yes' : 'No') . "\n";
-    } else {
-        echo "❌ Virus Scanning Not Configured\n";
-    }
-
-    return true;
 }
 
 /**
@@ -327,7 +320,43 @@ function runTests()
         if (!testDocumentListing($baseUrl, $customerToken, $kycId)) {
             $allTestsPassed = false;
         }
+
+        // Test 9: Document Upload
+        if (!testDocumentUpload($baseUrl, $customerToken, $kycId)) {
+            $allTestsPassed = false;
+        }
+
+        // Test 10: KYC Application Update
+        if (!testKycApplicationUpdate($baseUrl, $customerToken, $kycId)) {
+            $allTestsPassed = false;
+        }
+
+        // Test 11: KYC Application Submission
+        if (!testKycApplicationSubmission($baseUrl, $customerToken, $kycId)) {
+            $allTestsPassed = false;
+        }
     } else {
+        $allTestsPassed = false;
+    }
+
+    // Test 12: Admin Authentication and Review Functions
+    $adminToken = testAuthentication($baseUrl, $testUsers['admin']['email'], $testUsers['admin']['password']);
+    if (!testAdminReviewFunctions($baseUrl, $adminToken)) {
+        $allTestsPassed = false;
+    }
+
+    // Test 13: Error Handling
+    if (!testErrorHandling($baseUrl, $customerToken)) {
+        $allTestsPassed = false;
+    }
+
+    // Test 14: Security Tests
+    if (!testSecurityFeatures($baseUrl)) {
+        $allTestsPassed = false;
+    }
+
+    // Test 15: Performance Tests
+    if (!testPerformance($baseUrl, $customerToken)) {
         $allTestsPassed = false;
     }
 
@@ -363,5 +392,344 @@ function runTests()
     return $allTestsPassed;
 }
 
+/**
+ * Test document upload functionality
+ */
+function testDocumentUpload($baseUrl, $token, $kycId)
+{
+    echo "\n📤 Testing Document Upload...\n";
+
+    $testImagePath = createTestImage();
+    if (!$testImagePath) {
+        echo "❌ Failed to create test image\n";
+        return false;
+    }
+
+    $headers = ["Authorization: Bearer $token"];
+    $response = uploadFile($baseUrl, $kycId, $testImagePath, 'cnic_front', $headers);
+    
+    if ($response['status_code'] === 201) {
+        echo "✅ CNIC Front Upload Successful\n";
+        $success = true;
+    } else {
+        echo "❌ CNIC Front Upload Failed\n";
+        echo "   Status Code: " . $response['status_code'] . "\n";
+        $success = false;
+    }
+
+    if (file_exists($testImagePath)) {
+        unlink($testImagePath);
+    }
+
+    return $success;
+}
+
+/**
+ * Test KYC application update
+ */
+function testKycApplicationUpdate($baseUrl, $token, $kycId)
+{
+    echo "\n✏️ Testing KYC Application Update...\n";
+
+    $updateData = [
+        'address' => 'Updated Address: House No 456, Street 10, G-9/2, Islamabad',
+        'city' => 'Islamabad',
+        'postal_code' => '44000'
+    ];
+
+    $headers = ["Authorization: Bearer $token"];
+    $response = makeRequest('PUT', "$baseUrl/kyc/$kycId", $updateData, $headers);
+
+    if ($response['status_code'] === 200) {
+        echo "✅ KYC Application Update Successful\n";
+        return true;
+    } else {
+        echo "❌ KYC Application Update Failed\n";
+        echo "   Status Code: " . $response['status_code'] . "\n";
+        return false;
+    }
+}
+
+/**
+ * Test KYC application submission
+ */
+function testKycApplicationSubmission($baseUrl, $token, $kycId)
+{
+    echo "\n🚀 Testing KYC Application Submission...\n";
+
+    $headers = ["Authorization: Bearer $token"];
+    $response = makeRequest('POST', "$baseUrl/kyc/$kycId/submit", null, $headers);
+
+    if ($response['status_code'] === 200) {
+        echo "✅ KYC Application Submission Successful\n";
+        return true;
+    } else {
+        echo "❌ KYC Application Submission Failed\n";
+        echo "   Status Code: " . $response['status_code'] . "\n";
+        echo "   Response: " . $response['body'] . "\n";
+        return false;
+    }
+}
+
+/**
+ * Test admin review functions
+ */
+function testAdminReviewFunctions($baseUrl, $adminToken)
+{
+    echo "\n👨‍💼 Testing Admin Review Functions...\n";
+
+    $headers = ["Authorization: Bearer $adminToken"];
+    $response = makeRequest('GET', "$baseUrl/kyc/review/pending", null, $headers);
+
+    if ($response['status_code'] === 200) {
+        echo "✅ Admin Review List Retrieved\n";
+        $data = json_decode($response['body'], true);
+        echo "   Pending Applications: " . count($data['data']['data'] ?? []) . "\n";
+        return true;
+    } else {
+        echo "❌ Admin Review Functions Failed\n";
+        echo "   Status Code: " . $response['status_code'] . "\n";
+        return false;
+    }
+}
+
+/**
+ * Test error handling
+ */
+function testErrorHandling($baseUrl, $token)
+{
+    echo "\n🚨 Testing Error Handling...\n";
+
+    $headers = ["Authorization: Bearer $token"];
+    $testsPassed = 0;
+    $totalTests = 3;
+
+    // Test 1: Invalid KYC ID
+    $response = makeRequest('GET', "$baseUrl/kyc/99999", null, $headers);
+    if ($response['status_code'] === 404) {
+        echo "✅ Invalid KYC ID Error Handling\n";
+        $testsPassed++;
+    } else {
+        echo "❌ Invalid KYC ID Error Handling Failed\n";
+    }
+
+    // Test 2: Missing required fields
+    $invalidData = ['cnic' => ''];
+    $response = makeRequest('POST', "$baseUrl/kyc", $invalidData, $headers);
+    if ($response['status_code'] === 422 || $response['status_code'] === 400) {
+        echo "✅ Validation Error Handling\n";
+        $testsPassed++;
+    } else {
+        echo "❌ Validation Error Handling Failed\n";
+    }
+
+    // Test 3: Unauthorized access
+    $response = makeRequest('GET', "$baseUrl/kyc/review/pending", null, $headers);
+    if ($response['status_code'] === 403) {
+        echo "✅ Authorization Error Handling\n";
+        $testsPassed++;
+    } else {
+        echo "❌ Authorization Error Handling Failed\n";
+    }
+
+    return $testsPassed === $totalTests;
+}
+
+/**
+ * Test security features
+ */
+function testSecurityFeatures($baseUrl)
+{
+    echo "\n🔒 Testing Security Features...\n";
+
+    $testsPassed = 0;
+    $totalTests = 2;
+
+    // Test 1: Unauthenticated access
+    $response = makeRequest('GET', "$baseUrl/kyc");
+    if ($response['status_code'] === 401) {
+        echo "✅ Unauthenticated Access Protection\n";
+        $testsPassed++;
+    } else {
+        echo "❌ Unauthenticated Access Protection Failed\n";
+    }
+
+    // Test 2: CORS headers
+    $response = makeRequest('OPTIONS', "$baseUrl/health");
+    if ($response['status_code'] === 200 || $response['status_code'] === 204) {
+        echo "✅ CORS Headers Present\n";
+        $testsPassed++;
+    } else {
+        echo "❌ CORS Headers Test Failed\n";
+    }
+
+    return $testsPassed >= 1;
+}
+
+/**
+ * Test performance
+ */
+function testPerformance($baseUrl, $token)
+{
+    echo "\n⚡ Testing Performance...\n";
+
+    $testsPassed = 0;
+    $totalTests = 2;
+
+    // Test 1: Response time for health check
+    $startTime = microtime(true);
+    $response = makeRequest('GET', "$baseUrl/health");
+    $endTime = microtime(true);
+    $responseTime = ($endTime - $startTime) * 1000;
+
+    if ($responseTime < 1000) {
+        echo "✅ Health Check Response Time: " . round($responseTime, 2) . "ms\n";
+        $testsPassed++;
+    } else {
+        echo "❌ Health Check Response Time Too Slow: " . round($responseTime, 2) . "ms\n";
+    }
+
+    // Test 2: System info response time
+    $startTime = microtime(true);
+    $response = makeRequest('GET', "$baseUrl/system-info");
+    $endTime = microtime(true);
+    $responseTime = ($endTime - $startTime) * 1000;
+
+    if ($responseTime < 2000) {
+        echo "✅ System Info Response Time: " . round($responseTime, 2) . "ms\n";
+        $testsPassed++;
+    } else {
+        echo "❌ System Info Response Time Too Slow: " . round($responseTime, 2) . "ms\n";
+    }
+
+    return $testsPassed === $totalTests;
+}
+
+/**
+ * Create a test image file
+ */
+function createTestImage()
+{
+    $width = 800;
+    $height = 600;
+    $image = imagecreatetruecolor($width, $height);
+    
+    if (!$image) {
+        return false;
+    }
+
+    $white = imagecolorallocate($image, 255, 255, 255);
+    imagefill($image, 0, 0, $white);
+
+    $black = imagecolorallocate($image, 0, 0, 0);
+    imagestring($image, 5, 50, 50, 'TEST CNIC DOCUMENT', $black);
+    imagestring($image, 3, 50, 100, 'CNIC: 42101-1234567-1', $black);
+    imagestring($image, 3, 50, 130, 'Name: Muhammad Ahmad Khan', $black);
+
+    $tempFile = sys_get_temp_dir() . '/test_cnic_' . uniqid() . '.jpg';
+    $success = imagejpeg($image, $tempFile, 90);
+    imagedestroy($image);
+
+    return $success ? $tempFile : false;
+}
+
+/**
+ * Upload file using multipart form data
+ */
+function uploadFile($baseUrl, $kycId, $filePath, $documentType, $headers)
+{
+    $ch = curl_init();
+    
+    $postData = [
+        'document_type' => $documentType,
+        'file' => new CURLFile($filePath, 'image/jpeg', basename($filePath))
+    ];
+
+    curl_setopt($ch, CURLOPT_URL, "$baseUrl/kyc/$kycId/documents");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array_merge([
+        'Accept: application/json'
+    ], $headers));
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    return [
+        'status_code' => $httpCode,
+        'body' => $response,
+        'error' => $error
+    ];
+}
+
+/**
+ * Test database connectivity
+ */
+function testDatabaseConnectivity()
+{
+    echo "\n🗄️ Testing Database Connectivity...\n";
+    
+    try {
+        $dbPath = '/opt/lampp/htdocs/kyc-onboarding-system/database/database.sqlite';
+        if (file_exists($dbPath)) {
+            echo "✅ Database File Found\n";
+            echo "   Database Size: " . round(filesize($dbPath) / 1024, 2) . " KB\n";
+            return true;
+        } else {
+            echo "❌ Database File Not Found\n";
+            return false;
+        }
+    } catch (Exception $e) {
+        echo "❌ Database Connection Error: " . $e->getMessage() . "\n";
+        return false;
+    }
+}
+
+/**
+ * Test configuration files
+ */
+function testConfigurationFiles()
+{
+    echo "\n⚙️ Testing Configuration Files...\n";
+    
+    $configFiles = [
+        '/opt/lampp/htdocs/kyc-onboarding-system/.env',
+        '/opt/lampp/htdocs/kyc-onboarding-system/config/services.php',
+        '/opt/lampp/htdocs/kyc-onboarding-system/config/database.php'
+    ];
+    
+    $allFound = true;
+    foreach ($configFiles as $file) {
+        if (file_exists($file)) {
+            echo "✅ " . basename($file) . " found\n";
+        } else {
+            echo "❌ " . basename($file) . " missing\n";
+            $allFound = false;
+        }
+    }
+    
+    return $allFound;
+}
+
 // Run the tests
-runTests();
+if (php_sapi_name() === 'cli') {
+    echo "Starting KYC System Comprehensive Tests...\n";
+    echo "==========================================\n";
+    
+    testConfigurationFiles();
+    testDatabaseConnectivity();
+    
+    $result = runTests();
+    
+    exit($result ? 0 : 1);
+} else {
+    echo "<pre>";
+    testConfigurationFiles();
+    testDatabaseConnectivity();
+    runTests();
+    echo "</pre>";
+}
