@@ -452,28 +452,40 @@ class KycApplicationController extends Controller
     {
         // Dispatch verification jobs
         dispatch(function () use ($kycApplication) {
-            // NADRA verification
-            $this->nadraService->verifyCNIC($kycApplication);
+            try {
+                // NADRA verification
+                $this->nadraService->verifyCNIC($kycApplication);
 
-            // Sanctions screening
-            $this->sanctionsService->performScreening($kycApplication);
+                // Sanctions screening
+                $this->sanctionsService->performScreening($kycApplication);
 
-            // Update risk score
-            $kycApplication->updateRiskScore();
+                // Update risk score
+                $kycApplication->updateRiskScore();
 
-            // Check if can auto-approve
-            if ($kycApplication->canAutoApprove()) {
-                $kycApplication->update([
-                    'status' => 'approved',
-                    'account_tier' => 'basic',
-                    'processed_at' => now(),
-                    'processed_by' => 'system'
+                // Check if can auto-approve
+                if ($kycApplication->canAutoApprove()) {
+                    $kycApplication->update([
+                        'status' => 'approved',
+                        'account_tier' => 'basic',
+                        'processed_at' => now(),
+                        'processed_by' => 'system'
+                    ]);
+
+                    AuditTrail::logKycAction('auto_approved', $kycApplication);
+                } elseif ($kycApplication->requiresManualReview()) {
+                    $kycApplication->update(['status' => 'under_review']);
+                    AuditTrail::logKycAction('under_review', $kycApplication);
+                }
+            } catch (\Exception $e) {
+                Log::error('KYC Verification Process Failed', [
+                    'kyc_application_id' => $kycApplication->id,
+                    'error' => $e->getMessage()
                 ]);
-
-                AuditTrail::logKycAction('auto_approved', $kycApplication);
-            } elseif ($kycApplication->requiresManualReview()) {
+                
                 $kycApplication->update(['status' => 'under_review']);
-                AuditTrail::logKycAction('under_review', $kycApplication);
+                AuditTrail::logKycAction('verification_failed', $kycApplication, null, [
+                    'error' => $e->getMessage()
+                ]);
             }
         });
     }
@@ -506,13 +518,10 @@ class KycApplicationController extends Controller
         }
 
         // Sort by priority (high risk first, then by submission date)
-        $applications = $query->orderByRaw("
-            CASE 
-                WHEN risk_category = 'high' THEN 1
-                WHEN risk_category = 'medium' THEN 2
-                WHEN risk_category = 'low' THEN 3
-            END
-        ")->orderBy('submitted_at', 'asc')
+        $applications = $query->orderByRaw(
+            "CASE WHEN risk_category = ? THEN 1 WHEN risk_category = ? THEN 2 WHEN risk_category = ? THEN 3 END",
+            ['high', 'medium', 'low']
+        )->orderBy('submitted_at', 'asc')
             ->paginate(20);
 
         return response()->json([

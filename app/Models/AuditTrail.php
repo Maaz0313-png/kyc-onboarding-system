@@ -56,7 +56,7 @@ class AuditTrail extends Model
 
     public function scopeByAction($query, $action)
     {
-        return $query->where('action', $action);
+        return $query->where('action', '=', $action);
     }
 
     public function scopeRecent($query, $days = 30)

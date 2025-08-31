@@ -8,26 +8,26 @@
  * verification processes, and compliance workflows.
  */
 
-$baseUrl = 'http://0.0.0.0:8000/api';
+$baseUrl = 'http://kyc-onboarding-system.test/api';
 $testResults = [];
 
-// Test users from seeder
+// Test users from environment variables
 $testUsers = [
     'admin' => [
-        'email' => 'admin@kyc-system.com',
-        'password' => 'admin123'
+        'email' => $_ENV['TEST_ADMIN_EMAIL'] ?? 'admin@kyc-system.com',
+        'password' => $_ENV['TEST_ADMIN_PASSWORD'] ?? 'admin123'
     ],
     'compliance' => [
-        'email' => 'compliance@kyc-system.com',
-        'password' => 'compliance123'
+        'email' => $_ENV['TEST_COMPLIANCE_EMAIL'] ?? 'compliance@kyc-system.com',
+        'password' => $_ENV['TEST_COMPLIANCE_PASSWORD'] ?? 'compliance123'
     ],
     'kyc_officer' => [
-        'email' => 'kyc@kyc-system.com',
-        'password' => 'kyc123'
+        'email' => $_ENV['TEST_KYC_EMAIL'] ?? 'kyc@kyc-system.com',
+        'password' => $_ENV['TEST_KYC_PASSWORD'] ?? 'kyc123'
     ],
     'customer' => [
-        'email' => 'customer@example.com',
-        'password' => 'customer123'
+        'email' => $_ENV['TEST_CUSTOMER_EMAIL'] ?? 'customer@example.com',
+        'password' => $_ENV['TEST_CUSTOMER_PASSWORD'] ?? 'customer123'
     ]
 ];
 
@@ -131,7 +131,7 @@ function testAuthentication($baseUrl, $email, $password)
     echo "✅ Authentication simulated (using seeded users)\n";
     echo "   Note: In production, implement proper login endpoint\n";
 
-    return 'test-token-' . md5($email);
+    return 'test-token-' . hash('sha256', $email . time());
 }
 
 /**
@@ -247,7 +247,7 @@ function testServicesConfiguration()
 {
     echo "\n⚙️ Testing Services Configuration...\n";
 
-    $servicesConfigPath = '/opt/lampp/htdocs/kyc-onboarding-system/config/services.php';
+    $servicesConfigPath = dirname(__DIR__) . '/config/services.php';
     
     if (file_exists($servicesConfigPath)) {
         $configContent = file_get_contents($servicesConfigPath);
@@ -674,7 +674,7 @@ function testDatabaseConnectivity()
     echo "\n🗄️ Testing Database Connectivity...\n";
     
     try {
-        $dbPath = '/opt/lampp/htdocs/kyc-onboarding-system/database/database.sqlite';
+        $dbPath = dirname(__DIR__) . '/database/database.sqlite';
         if (file_exists($dbPath)) {
             echo "✅ Database File Found\n";
             echo "   Database Size: " . round(filesize($dbPath) / 1024, 2) . " KB\n";
@@ -696,10 +696,11 @@ function testConfigurationFiles()
 {
     echo "\n⚙️ Testing Configuration Files...\n";
     
+    $basePath = dirname(__DIR__);
     $configFiles = [
-        '/opt/lampp/htdocs/kyc-onboarding-system/.env',
-        '/opt/lampp/htdocs/kyc-onboarding-system/config/services.php',
-        '/opt/lampp/htdocs/kyc-onboarding-system/config/database.php'
+        $basePath . '/.env',
+        $basePath . '/config/services.php',
+        $basePath . '/config/database.php'
     ];
     
     $allFound = true;

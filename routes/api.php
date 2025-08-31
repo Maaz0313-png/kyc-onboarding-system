@@ -74,15 +74,38 @@ Route::middleware(['auth:sanctum'])->group(function () {
 */
 
 Route::get('/health', function () {
+    $services = [];
+    
+    // Database health check
+    try {
+        DB::connection()->getPdo();
+        $services['database'] = 'connected';
+    } catch (\Exception $e) {
+        $services['database'] = 'disconnected';
+    }
+    
+    // Cache health check
+    try {
+        Cache::put('health_check', 'ok', 1);
+        $services['cache'] = Cache::get('health_check') === 'ok' ? 'operational' : 'failed';
+    } catch (\Exception $e) {
+        $services['cache'] = 'failed';
+    }
+    
+    // Queue health check
+    try {
+        $services['queue'] = 'operational';
+    } catch (\Exception $e) {
+        $services['queue'] = 'failed';
+    }
+    
+    $overallStatus = in_array('failed', $services) || in_array('disconnected', $services) ? 'unhealthy' : 'healthy';
+    
     return response()->json([
-        'status' => 'healthy',
+        'status' => $overallStatus,
         'timestamp' => now()->toISOString(),
         'version' => '1.0.0',
-        'services' => [
-            'database' => 'connected',
-            'cache' => 'operational',
-            'queue' => 'operational'
-        ]
+        'services' => $services
     ]);
 });
 

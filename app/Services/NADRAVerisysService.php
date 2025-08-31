@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\KycApplication;
 use App\Models\KycVerification;
 use App\Models\AuditTrail;
+use App\Models\KycStatus;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Support\Facades\Log;
@@ -24,6 +25,10 @@ class NADRAVerisysService
         $this->apiKey = config('services.nadra.api_key');
         $this->clientId = config('services.nadra.client_id');
         $this->timeout = config('services.nadra.timeout', 30);
+        
+        if (empty($this->apiKey) || empty($this->clientId)) {
+            throw new \InvalidArgumentException('NADRA API credentials are required');
+        }
 
         $this->client = new Client([
             'base_uri' => $this->baseUrl,
@@ -66,7 +71,12 @@ class NADRAVerisysService
                 ]
             ]);
 
-            $responseData = json_decode($response->getBody()->getContents(), true);
+            $responseBody = $response->getBody()->getContents();
+            $responseData = json_decode($responseBody, true);
+            
+            if ($responseData === null) {
+                throw new \Exception('Invalid JSON response from NADRA API');
+            }
 
             if ($responseData['status'] === 'success') {
                 $matchScore = $this->calculateMatchScore($responseData);

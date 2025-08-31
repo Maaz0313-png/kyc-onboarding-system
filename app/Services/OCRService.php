@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\KycStatus;
+
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 
@@ -373,7 +375,7 @@ class OCRService
                 $now = new \DateTime();
                 $age = $now->diff($dob)->y;
 
-                if ($age < 18 || $age > 100) {
+                if ($age < KycStatus::MIN_AGE || $age > KycStatus::MAX_AGE) {
                     $errors[] = 'Invalid date of birth (age must be between 18-100)';
                 }
             } catch (\Exception $e) {

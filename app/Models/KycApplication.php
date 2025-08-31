@@ -120,23 +120,23 @@ class KycApplication extends Model
     // Helper Methods
     public function isCompliant(): bool
     {
-        return $this->sanctions_cleared && 
-               $this->pep_cleared && 
-               $this->nadra_verified && 
-               $this->biometric_verified;
+        return ($this->sanctions_cleared ?? false) && 
+               ($this->pep_cleared ?? false) && 
+               ($this->nadra_verified ?? false) && 
+               ($this->biometric_verified ?? false);
     }
 
     public function canAutoApprove(): bool
     {
         return $this->isCompliant() && 
-               $this->risk_score <= 30 && 
-               $this->risk_category === 'low';
+               ($this->risk_score ?? 100) <= 30 && 
+               ($this->risk_category ?? 'high') === 'low';
     }
 
     public function requiresManualReview(): bool
     {
-        return $this->risk_score > 70 || 
-               $this->risk_category === 'high' ||
+        return ($this->risk_score ?? 0) > 70 || 
+               ($this->risk_category ?? 'low') === 'high' ||
                !$this->isCompliant();
     }
 

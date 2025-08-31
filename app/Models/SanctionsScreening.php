@@ -81,7 +81,7 @@ class SanctionsScreening extends Model
 
     public function scopeByType($query, $type)
     {
-        return $query->where('screening_type', $type);
+        return $query->where('screening_type', '=', $type);
     }
 
     public function scopeReportedToFmu($query)

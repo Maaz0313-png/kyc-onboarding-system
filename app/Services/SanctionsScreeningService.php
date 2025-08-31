@@ -64,7 +64,7 @@ class SanctionsScreeningService
                 'full_name' => $kycApplication->full_name,
                 'father_name' => $kycApplication->father_name,
                 'cnic' => $kycApplication->cnic,
-                'date_of_birth' => $kycApplication->date_of_birth->format('Y-m-d')
+                'date_of_birth' => $kycApplication->date_of_birth?->format('Y-m-d')
             ]
         ]);
 
@@ -265,7 +265,7 @@ class SanctionsScreeningService
             'search_criteria' => [
                 'full_name' => $kycApplication->full_name,
                 'father_name' => $kycApplication->father_name,
-                'date_of_birth' => $kycApplication->date_of_birth->format('Y-m-d')
+                'date_of_birth' => $kycApplication->date_of_birth?->format('Y-m-d')
             ]
         ]);
 
@@ -384,6 +384,11 @@ class SanctionsScreeningService
     private function loadListFromFile(string $filePath): array
     {
         try {
+            // Validate file path to prevent directory traversal
+            if (strpos($filePath, '..') !== false || !str_starts_with($filePath, 'sanctions/')) {
+                throw new \InvalidArgumentException('Invalid file path');
+            }
+            
             if (Storage::exists($filePath)) {
                 $content = Storage::get($filePath);
                 return json_decode($content, true) ?? [];
